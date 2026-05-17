@@ -87,18 +87,16 @@ async function refreshAll() {
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const payload = {
-    title: document.getElementById('title').value.trim(),
-    url: document.getElementById('url').value.trim(),
-    description: document.getElementById('description').value.trim(),
-    image_url: document.getElementById('image_url').value.trim(),
-    site_name: document.getElementById('site_name').value.trim(),
-  };
-  const res = await fetch('/api/links', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  const fileInput = document.getElementById('image_file');
+  const file = fileInput && fileInput.files && fileInput.files[0];
+  const fd = new FormData();
+  fd.append('title', document.getElementById('title').value.trim());
+  fd.append('url', document.getElementById('url').value.trim());
+  fd.append('description', document.getElementById('description').value.trim());
+  fd.append('site_name', document.getElementById('site_name').value.trim());
+  if (file) fd.append('image', file);
+  else fd.append('image_url', document.getElementById('image_url').value.trim());
+  const res = await fetch('/api/links', { method: 'POST', body: fd });
   const data = await res.json();
   if (!res.ok) {
     alert(data.error || 'حصل خطأ');

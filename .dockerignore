@@ -5,6 +5,7 @@ npm-debug.log
 .env
 data.json
 data.json.tmp
+uploads
 Dockerfile
 .dockerignore
 docker-compose.yml

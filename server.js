@@ -2,11 +2,14 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
+const multer = require('multer');
 const UAParser = require('ua-parser-js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'data.json');
+const UPLOAD_DIR = path.join(__dirname, 'uploads');
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 // --- Tiny JSON-file store (sync writes; fine for low-volume) ----------------
 function loadStore() {
@@ -42,6 +45,26 @@ function makeId(len = 8) {
 app.set('trust proxy', true);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(UPLOAD_DIR, {
+  maxAge: '7d',
+  setHeaders: (res) => res.set('Cache-Control', 'public, max-age=604800'),
+}));
+
+const ALLOWED_IMG = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+    filename: (_req, file, cb) => {
+      const ext = ALLOWED_IMG[file.mimetype] || path.extname(file.originalname) || '.bin';
+      cb(null, makeId(16) + ext);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_IMG[file.mimetype]) cb(null, true);
+    else cb(new Error('Only JPG, PNG, WEBP, GIF allowed'));
+  },
+});
 
 function getClientIp(req) {
   const xff = req.headers['x-forwarded-for'];
@@ -115,17 +138,35 @@ async function lookupGeo(ip) {
 }
 
 // --- API: links -------------------------------------------------------------
-app.post('/api/links', (req, res) => {
+// Accepts either multipart/form-data (with optional `image` file) or JSON.
+app.post('/api/links', upload.single('image'), (req, res) => {
   const { title, url, description, image_url, site_name } = req.body || {};
   const cleanTitle = String(title || '').trim();
   const cleanUrl = normalizeUrl(url);
   const cleanDesc = String(description || '').trim().slice(0, 500) || null;
-  const cleanImage = image_url ? normalizeUrl(image_url) : null;
   const cleanSite = String(site_name || '').trim() || 'Facebook';
-  if (!cleanTitle) return res.status(400).json({ error: 'Title is required' });
-  if (!cleanUrl) return res.status(400).json({ error: 'URL is required' });
-  try { new URL(cleanUrl); } catch { return res.status(400).json({ error: 'Invalid URL' }); }
-  if (cleanImage) { try { new URL(cleanImage); } catch { return res.status(400).json({ error: 'Invalid image URL' }); } }
+
+  // image: uploaded file wins; otherwise fall back to a pasted URL.
+  let cleanImage = null;
+  if (req.file) {
+    cleanImage = '/uploads/' + req.file.filename;
+  } else if (image_url) {
+    cleanImage = normalizeUrl(image_url);
+    if (cleanImage) { try { new URL(cleanImage); } catch { return res.status(400).json({ error: 'Invalid image URL' }); } }
+  }
+
+  if (!cleanTitle) {
+    if (req.file) try { fs.unlinkSync(req.file.path); } catch {}
+    return res.status(400).json({ error: 'Title is required' });
+  }
+  if (!cleanUrl) {
+    if (req.file) try { fs.unlinkSync(req.file.path); } catch {}
+    return res.status(400).json({ error: 'URL is required' });
+  }
+  try { new URL(cleanUrl); } catch {
+    if (req.file) try { fs.unlinkSync(req.file.path); } catch {}
+    return res.status(400).json({ error: 'Invalid URL' });
+  }
 
   const id = makeId(8);
   const now = Date.now();
@@ -160,6 +201,8 @@ app.get('/api/links', (req, res) => {
 
 app.delete('/api/links/:id', (req, res) => {
   const { id } = req.params;
+  const link = store.links.find(l => l.id === id);
+  deleteLinkImage(link);
   const before = store.links.length;
   store.links = store.links.filter(l => l.id !== id);
   store.visits = store.visits.filter(v => v.link_id !== id);
@@ -182,6 +225,13 @@ app.get('/api/visits', (req, res) => {
     });
   res.json(out);
 });
+
+// Delete a link's uploaded image (if any) when the link itself is deleted.
+function deleteLinkImage(link) {
+  if (!link || !link.image_url || !link.image_url.startsWith('/uploads/')) return;
+  const file = path.join(UPLOAD_DIR, path.basename(link.image_url));
+  try { fs.unlinkSync(file); } catch {}
+}
 
 // Update a visit with precise GPS coords (called from the tracking page).
 app.post('/api/visits/:visitId/location', (req, res) => {
@@ -209,8 +259,15 @@ function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
 
+function absoluteUrl(pageUrl, maybeRelative) {
+  if (!maybeRelative) return '';
+  if (/^https?:\/\//i.test(maybeRelative)) return maybeRelative;
+  try { return new URL(maybeRelative, pageUrl).toString(); }
+  catch { return maybeRelative; }
+}
+
 function ogMetaTags(link, pageUrl) {
-  const img = link.image_url || '';
+  const img = absoluteUrl(pageUrl, link.image_url);
   const desc = link.description || '';
   const site = link.site_name || 'Facebook';
   return `

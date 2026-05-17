@@ -28,8 +28,13 @@
           <input id="description" name="description" type="text" placeholder="نص قصير وصفي للبوست" />
         </div>
         <div class="field full">
-          <label for="image_url">رابط الصورة (اختياري — تظهر كـpreview)</label>
-          <input id="image_url" name="image_url" type="text" placeholder="https://example.com/image.jpg" />
+          <label for="image_file">صورة الـPreview (اختياري)</label>
+          <div class="image-input">
+            <input id="image_file" name="image" type="file" accept="image/jpeg,image/png,image/webp,image/gif" />
+            <span class="muted small">— أو الصق رابط صورة —</span>
+            <input id="image_url" name="image_url" type="text" placeholder="https://example.com/image.jpg" />
+          </div>
+          <small class="muted">JPG/PNG/WEBP/GIF — حد أقصى 5MB. الأنسب 1200×630.</small>
         </div>
         <div class="field">
           <label for="site_name">اسم الموقع</label>

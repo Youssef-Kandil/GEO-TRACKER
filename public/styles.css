@@ -38,6 +38,10 @@ h2 { margin: 0 0 12px; font-size: 18px; }
 form { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; align-items: end; }
 .field.full { grid-column: 1 / -1; }
 form > button { grid-column: 1 / -1; justify-self: end; padding: 10px 24px; }
+.image-input { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.image-input input[type="file"] { color: var(--text); flex: 0 1 auto; }
+.image-input input[type="text"] { flex: 1 1 240px; min-width: 200px; }
+.small { font-size: 12px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 label { font-size: 13px; color: var(--muted); }
 input, select {
