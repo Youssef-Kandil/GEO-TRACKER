@@ -35,7 +35,9 @@ h2 { margin: 0 0 12px; font-size: 18px; }
   padding: 18px;
   margin-bottom: 20px;
 }
-form { display: grid; gap: 12px; grid-template-columns: 1fr 1fr auto; align-items: end; }
+form { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; align-items: end; }
+.field.full { grid-column: 1 / -1; }
+form > button { grid-column: 1 / -1; justify-self: end; padding: 10px 24px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 label { font-size: 13px; color: var(--muted); }
 input, select {

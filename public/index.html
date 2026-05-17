@@ -16,12 +16,24 @@
     <section class="card">
       <form id="link-form">
         <div class="field">
-          <label for="title">العنوان</label>
-          <input id="title" name="title" type="text" placeholder="مثال: بوست فيسبوك للعرض" required />
+          <label for="title">العنوان (يظهر في الـpreview)</label>
+          <input id="title" name="title" type="text" placeholder="مثال: شوف البوست ده!" required />
         </div>
         <div class="field">
-          <label for="url">الرابط الأصلي</label>
+          <label for="url">الرابط الأصلي (الوجهة)</label>
           <input id="url" name="url" type="text" placeholder="https://www.facebook.com/..." required />
+        </div>
+        <div class="field full">
+          <label for="description">الوصف (اختياري — يظهر تحت العنوان في واتساب/فيسبوك)</label>
+          <input id="description" name="description" type="text" placeholder="نص قصير وصفي للبوست" />
+        </div>
+        <div class="field full">
+          <label for="image_url">رابط الصورة (اختياري — تظهر كـpreview)</label>
+          <input id="image_url" name="image_url" type="text" placeholder="https://example.com/image.jpg" />
+        </div>
+        <div class="field">
+          <label for="site_name">اسم الموقع</label>
+          <input id="site_name" name="site_name" type="text" placeholder="Facebook" value="Facebook" />
         </div>
         <button type="submit">إنشاء رابط متتبع</button>
       </form>

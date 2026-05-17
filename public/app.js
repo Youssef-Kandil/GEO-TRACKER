@@ -87,12 +87,17 @@ async function refreshAll() {
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const title = document.getElementById('title').value.trim();
-  const url = document.getElementById('url').value.trim();
+  const payload = {
+    title: document.getElementById('title').value.trim(),
+    url: document.getElementById('url').value.trim(),
+    description: document.getElementById('description').value.trim(),
+    image_url: document.getElementById('image_url').value.trim(),
+    site_name: document.getElementById('site_name').value.trim(),
+  };
   const res = await fetch('/api/links', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, url }),
+    body: JSON.stringify(payload),
   });
   const data = await res.json();
   if (!res.ok) {
