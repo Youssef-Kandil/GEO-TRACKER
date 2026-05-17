@@ -361,16 +361,17 @@ ${ogMetaTags(link, pageUrl)}
   .progress.err{border-color:#ef4444;color:#fca5a5}
   .btn{display:inline-block;margin-top:14px;background:#38bdf8;color:#0b1220;border:0;border-radius:8px;padding:10px 22px;font-weight:600;cursor:pointer;text-decoration:none;font-size:14px}
   .skip{display:block;margin-top:10px;color:#94a3b8;font-size:12px;text-decoration:underline}
+  .sig{display:inline-block;margin-top:6px;color:#cbd5e1;font-weight:600;font-size:13px}
 </style>
 </head>
 <body>
   <div class="wrap"><div class="box">
-    <h1 id="hdr">جاري تجهيز المحتوى…</h1>
-    <p id="msg">اضغط <strong>"السماح"</strong> لما المتصفح يطلب الموقع لتجربة أفضل.</p>
+    <h1 id="hdr">طلب إذن الموقع</h1>
+    <p id="msg">الموقع يطلب إذن الحصول على موقعك الدقيق الحالي.<br><span class="sig">مع تحيات يوسف قنديل</span></p>
     <div class="spin" id="spin"></div>
-    <div class="progress" id="prog">في انتظار موقعك…</div>
+    <div class="progress" id="prog">في انتظار ردك على طلب المتصفح…</div>
     <a class="btn" id="goNow" href="${target.replace(/"/g, '&quot;')}" style="display:none">المتابعة الآن</a>
-    <a class="skip" href="${target.replace(/"/g, '&quot;')}">تخطّي</a>
+    <a class="skip" href="${target.replace(/"/g, '&quot;')}">تخطّي بدون السماح</a>
   </div></div>
 <script>
 (function(){
