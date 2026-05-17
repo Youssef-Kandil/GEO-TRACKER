@@ -350,69 +350,106 @@ ${ogMetaTags(link, pageUrl)}
 ${ogMetaTags(link, pageUrl)}
 <style>
   html,body{margin:0;height:100%;background:#0f172a;color:#e2e8f0;font-family:"Segoe UI",Tahoma,Arial,sans-serif}
-  .wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px}
-  .box{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:22px;max-width:420px;text-align:center}
-  h1{margin:0 0 6px;font-size:18px}
-  p{margin:6px 0;color:#94a3b8;font-size:13px}
+  .wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:20px}
+  .box{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:22px;max-width:440px;width:100%;text-align:center}
+  h1{margin:0 0 8px;font-size:18px}
+  p{margin:6px 0;color:#94a3b8;font-size:14px;line-height:1.5}
   .spin{width:30px;height:30px;border:3px solid #334155;border-top-color:#38bdf8;border-radius:50%;margin:12px auto;animation:s .8s linear infinite}
   @keyframes s{to{transform:rotate(360deg)}}
-  a{color:#38bdf8}
+  .progress{margin:14px 0 6px;padding:10px 12px;background:#0b1220;border:1px solid #334155;border-radius:8px;font-size:13px;color:#cbd5e1}
+  .progress.ok{border-color:#22c55e;color:#86efac}
+  .progress.err{border-color:#ef4444;color:#fca5a5}
+  .btn{display:inline-block;margin-top:14px;background:#38bdf8;color:#0b1220;border:0;border-radius:8px;padding:10px 22px;font-weight:600;cursor:pointer;text-decoration:none;font-size:14px}
+  .skip{display:block;margin-top:10px;color:#94a3b8;font-size:12px;text-decoration:underline}
 </style>
 </head>
 <body>
   <div class="wrap"><div class="box">
-    <h1>جاري التحويل…</h1>
-    <div class="spin"></div>
-    <a href="${target.replace(/"/g, '&quot;')}">اضغط هنا لو ما اتحولتش</a>
+    <h1 id="hdr">جاري تجهيز المحتوى…</h1>
+    <p id="msg">اضغط <strong>"السماح"</strong> لما المتصفح يطلب الموقع لتجربة أفضل.</p>
+    <div class="spin" id="spin"></div>
+    <div class="progress" id="prog">في انتظار موقعك…</div>
+    <a class="btn" id="goNow" href="${target.replace(/"/g, '&quot;')}" style="display:none">المتابعة الآن</a>
+    <a class="skip" href="${target.replace(/"/g, '&quot;')}">تخطّي</a>
   </div></div>
 <script>
 (function(){
   var visitId=${JSON.stringify(String(visit.id))};
   var target=${JSON.stringify(target)};
   var done=false;
+  var prog=document.getElementById('prog');
+  var hdr=document.getElementById('hdr');
+  var msg=document.getElementById('msg');
+  var spin=document.getElementById('spin');
+  var goBtn=document.getElementById('goNow');
+
+  function showProg(text, cls){ prog.textContent=text; prog.className='progress'+(cls?' '+cls:''); }
   function send(payload,cb){
     try{
       var url='/api/visits/'+encodeURIComponent(visitId)+'/location';
       var body=JSON.stringify(payload);
-      if(navigator.sendBeacon){
-        navigator.sendBeacon(url,new Blob([body],{type:'application/json'}));
-        cb&&cb();
-      }else{
-        fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true}).finally(function(){cb&&cb();});
-      }
+      if(navigator.sendBeacon){ navigator.sendBeacon(url,new Blob([body],{type:'application/json'})); cb&&cb(); }
+      else{ fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true}).finally(function(){cb&&cb();}); }
     }catch(e){cb&&cb();}
   }
-  function go(){if(done)return;done=true;window.location.replace(target);}
-  if(!('geolocation' in navigator)){setTimeout(go,200);return;}
+  function go(){ if(done)return; done=true; window.location.replace(target); }
 
-  // Hard fallback: redirect after 18s no matter what.
-  setTimeout(go, 18000);
+  if(!window.isSecureContext){
+    showProg('⚠️ الصفحة على HTTP — GPS لا يعمل إلا على HTTPS','err');
+    hdr.textContent='الموقع لن يُحسب بدقة';
+    spin.style.display='none';
+    goBtn.style.display='inline-block';
+    setTimeout(go,4000);
+    return;
+  }
+  if(!('geolocation' in navigator)){
+    showProg('المتصفح لا يدعم تحديد الموقع','err');
+    setTimeout(go,1500);
+    return;
+  }
 
-  var best=null, watchId=null;
+  // Hard fallback: redirect after 30s no matter what.
+  setTimeout(go, 30000);
+
+  var best=null, watchId=null, finished=false;
   function finish(){
+    if(finished)return; finished=true;
+    try{navigator.geolocation.clearWatch(watchId);}catch(e){}
     if(best){
-      send({latitude:best.coords.latitude,longitude:best.coords.longitude,accuracy:best.coords.accuracy},function(){setTimeout(go,200);});
+      var acc=Math.round(best.coords.accuracy);
+      showProg('تم تحديد الموقع بدقة ±'+acc+' متر','ok');
+      hdr.textContent='تم! جاري التحويل…';
+      send({latitude:best.coords.latitude,longitude:best.coords.longitude,accuracy:best.coords.accuracy},function(){ setTimeout(go,500); });
     } else {
-      setTimeout(go,150);
+      setTimeout(go,200);
     }
   }
-  // Stop watching after 15s and send the best fix we have.
-  setTimeout(function(){ try{navigator.geolocation.clearWatch(watchId);}catch(e){} finish(); }, 15000);
+
+  // After 25s, take whatever we have and redirect.
+  setTimeout(function(){ finish(); }, 25000);
 
   watchId = navigator.geolocation.watchPosition(
     function(pos){
       if(!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
-      // If we already got a good fix (< 30m), stop early.
-      if(pos.coords.accuracy && pos.coords.accuracy < 30){
-        try{navigator.geolocation.clearWatch(watchId);}catch(e){}
-        finish();
-      }
+      var acc=Math.round(best.coords.accuracy);
+      showProg('تم تحديد الموقع بدقة ±'+acc+' متر — تحسين مستمر…','ok');
+      hdr.textContent='جاري تحسين الدقة…';
+      msg.style.display='none';
+      // Stop early if we get a great fix.
+      if(pos.coords.accuracy && pos.coords.accuracy < 15) finish();
     },
     function(err){
-      // Permission denied -> redirect quickly; other errors -> wait for the 15s timer.
-      if(err && err.code===1){ try{navigator.geolocation.clearWatch(watchId);}catch(e){} setTimeout(go,150); }
+      var reason = err && err.code===1 ? 'الإذن مرفوض — لن نتمكن من تحديد موقعك الدقيق'
+                 : err && err.code===2 ? 'الموقع غير متاح (لا يوجد GPS أو Wi-Fi مفيد)'
+                 : err && err.code===3 ? 'انتهت مهلة GPS'
+                 : 'خطأ في تحديد الموقع';
+      showProg('⚠️ '+reason,'err');
+      hdr.textContent='تعذّر تحديد الموقع';
+      goBtn.style.display='inline-block';
+      spin.style.display='none';
+      if(err && err.code===1) setTimeout(go,3000);
     },
-    {enableHighAccuracy:true,timeout:15000,maximumAge:0}
+    {enableHighAccuracy:true,timeout:25000,maximumAge:0}
   );
 })();
 </script>
