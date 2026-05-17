@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Link Tracker</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main>
+    <header>
+      <h1>متتبع الروابط</h1>
+      <p class="muted">أنشئ رابط متتبع، شاركه، وشوف مين فتحه (IP، نوع الجهاز، المتصفح، الموقع التقريبي).</p>
+    </header>
+
+    <section class="card">
+      <form id="link-form">
+        <div class="field">
+          <label for="title">العنوان</label>
+          <input id="title" name="title" type="text" placeholder="مثال: بوست فيسبوك للعرض" required />
+        </div>
+        <div class="field">
+          <label for="url">الرابط الأصلي</label>
+          <input id="url" name="url" type="text" placeholder="https://www.facebook.com/..." required />
+        </div>
+        <button type="submit">إنشاء رابط متتبع</button>
+      </form>
+      <div id="created" class="created hidden">
+        <strong>الرابط الجديد:</strong>
+        <a id="created-link" href="#" target="_blank" rel="noreferrer"></a>
+        <button id="copy-btn" type="button">نسخ</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row-between">
+        <h2>الزيارات المسجلة</h2>
+        <div class="controls">
+          <select id="filter-link">
+            <option value="">كل الروابط</option>
+          </select>
+          <button id="refresh-btn" type="button">تحديث</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>الوقت</th>
+              <th>العنوان</th>
+              <th>نوع الجهاز</th>
+              <th>النظام</th>
+              <th>المتصفح</th>
+              <th>IP</th>
+              <th>الموقع</th>
+              <th>الإحداثيات</th>
+              <th>ISP</th>
+              <th>الرابط</th>
+            </tr>
+          </thead>
+          <tbody id="visits-body">
+            <tr><td colspan="10" class="muted center">لا توجد زيارات بعد</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>الروابط المُنشأة</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>العنوان</th>
+              <th>الرابط المتتبع</th>
+              <th>الوجهة</th>
+              <th>الزيارات</th>
+              <th>آخر زيارة</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="links-body">
+            <tr><td colspan="6" class="muted center">لا توجد روابط بعد</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
