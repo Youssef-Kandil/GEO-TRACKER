@@ -58,8 +58,12 @@ async function loadVisits() {
   visitsBody.innerHTML = visits.map(v => {
     const loc = [v.city, v.region, v.country].filter(Boolean).join('، ') || '-';
     const hasCoords = v.latitude != null && v.longitude != null;
+    const isGps = v.geo_status === 'gps';
+    const precision = isGps
+      ? `<span class="pill" title="دقيق بـ${v.accuracy ? Math.round(v.accuracy) + ' م' : 'GPS'}">GPS ${v.accuracy ? '±' + Math.round(v.accuracy) + 'م' : ''}</span>`
+      : `<span class="pill" title="مستوى المدينة">IP</span>`;
     const coordsCell = hasCoords
-      ? `<a href="https://www.google.com/maps?q=${v.latitude},${v.longitude}" target="_blank" rel="noreferrer">${Number(v.latitude).toFixed(4)}, ${Number(v.longitude).toFixed(4)}</a>`
+      ? `<a href="https://www.google.com/maps?q=${v.latitude},${v.longitude}" target="_blank" rel="noreferrer">${Number(v.latitude).toFixed(isGps ? 6 : 4)}, ${Number(v.longitude).toFixed(isGps ? 6 : 4)}</a> ${precision}`
       : `<span class="pill">${escapeHtml(v.geo_status || '-')}</span>`;
     return `
     <tr>
